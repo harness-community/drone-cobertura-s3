@@ -60,19 +60,3 @@ Using AWS Access Key ID and Secret Access Key as authentication method:
                       aws_bucket: cobertura-plugin
                       report_source: /harness
 ```
-
-
-NAME:
-   drone-cobertura-s3
-...
-...
-GLOBAL OPTIONS:
-   --pipeline-sequence-id value  Harness CIE Pipeline Sequence ID [$PLUGIN_PIPELINE_SID]
-   --aws-access-key value        AWS Access Key ID [$PLUGIN_AWS_ACCESS_KEY_ID]
-   --aws-secret-key value        AWS Secret Access Key [$PLUGIN_AWS_SECRET_ACCESS_KEY]
-   --aws-default-region value    AWS Default Region [$PLUGIN_AWS_DEFAULT_REGION]
-   --aws-bucket value            AWS Default Region [$PLUGIN_AWS_BUCKET]
-   --report-source value         AWS Default Region [$PLUGIN_REPORT_SOURCE]
-...
-...
-```
