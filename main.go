@@ -37,7 +37,7 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:   "aws-bucket",
-			Usage:  "AWS Default Region",
+			Usage:  "The name of the S3 bucket where you want to upload the Cobertura report files",
 			EnvVar: "PLUGIN_AWS_BUCKET",
 		},
 		cli.StringFlag{
@@ -52,12 +52,12 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:   "report-source",
-			Usage:  "AWS Default Region",
+			Usage:  "The source directory containing all the Cobertura report files which are to be uploaded to S3 bucket",
 			EnvVar: "PLUGIN_REPORT_SOURCE",
 		},
 		cli.StringFlag{
 			Name:   "report-target",
-			Usage:  "Report target",
+			Usage:  "The target directory in the S3 bucket where the user wants to upload the Cobertura report files",
 			EnvVar: "PLUGIN_REPORT_TARGET",
 		},
 		cli.StringFlag{
