@@ -15,7 +15,7 @@ go build
 Build the Docker image with the following commands:
 
 ```
-./hacking/build.sh
+./builds/build.sh
 docker buildx build -t DOCKER_ORG/drone-cobertura-s3 --platform linux/amd64 .
 ```
 
