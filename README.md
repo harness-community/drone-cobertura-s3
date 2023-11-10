@@ -1,6 +1,6 @@
 # drone-cobertura-s3
 
-Drone plugin to upload cobertura code coverage reports to AWS S3 bucket and publish the bucket static site url to `Artifacts` tab under `Pipieline Execution`.
+Drone plugin to upload cobertura code coverage reports to AWS S3 bucket and publish the bucket static site URL to `Artifacts` tab under `Pipieline Execution`.
 
 ## Build
 

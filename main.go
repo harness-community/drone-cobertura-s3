@@ -16,7 +16,7 @@ var (
 func main() {
 	app := cli.NewApp()
 	app.Name = "drone-cobertura-s3"
-	app.Usage = "Drone plugin to upload cobertura code coverage reports to AWS S3 bucket and publish the s3 bucket static site url under 'Executions > Artifacts' tab"
+	app.Usage = "Drone plugin to upload cobertura code coverage reports to AWS S3 bucket and publish the s3 bucket static site URL under 'Executions > Artifacts' tab"
 	app.Action = run
 	app.Version = pluginVersion
 	app.Flags = []cli.Flag{
