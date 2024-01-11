@@ -1,0 +1,8 @@
+# Use the appropriate base image for Windows/amd64
+FROM mcr.microsoft.com/windows/servercore:ltsc2019
+
+# Copy the binary from your release directory to the /bin/ directory in the image
+ADD release/windows/amd64/drone-cobertura-s3.exe /bin/
+
+# Set the entry point for the container
+ENTRYPOINT ["C:\\\\bin\\drone-cobertura-s3.exe"]
