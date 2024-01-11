@@ -4,10 +4,12 @@ Drone plugin to upload cobertura code coverage reports to AWS S3 bucket and publ
 
 ## Build
 
-Build the binary with the following commands:
+Build the binary for different OS/Arch with the following commands:
 
 ```bash
-go build
+env GOOS=linux GOARCH=amd64 go build -o release/linux/amd64/drone-cobertura-s3 .
+env GOOS=linux GOARCH=arm64 go build -o release/linux/arm64/drone-cobertura-s3 .
+env GOOS=windows go build -o release/windows/amd64/drone-cobertura-s3.exe   
 ```
 
 ## Docker
