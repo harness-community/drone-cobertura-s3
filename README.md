@@ -17,8 +17,7 @@ env GOOS=windows go build -o release/windows/amd64/drone-cobertura-s3.exe
 Build the Docker image with the following commands:
 
 ```
-./builds/build.sh
-docker buildx build -t DOCKER_ORG/drone-cobertura-s3 --platform linux/amd64 .
+docker build -t DOCKER_ORG/drone-cobertura-s3 -f PATH_TO_DOCKERFILE
 ```
 
 Please note incorrectly building the image for the correct x64 linux and with
