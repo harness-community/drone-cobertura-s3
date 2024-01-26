@@ -1,5 +1,7 @@
-FROM amazon/aws-cli:arm64
+FROM alpine:latest
 
-ADD release/linux/amd64/drone-cobertura-s3 /bin/
+ADD release/linux/arm64/drone-cobertura-s3 /bin/
 
-ENTRYPOINT ["/usr/bin/bash", "-l", "-c", "/bin/drone-cobertura-s3"]
+RUN apk add --no-cache bash
+
+ENTRYPOINT ["/bin/bash", "-l", "-c", "/bin/drone-cobertura-s3"]
