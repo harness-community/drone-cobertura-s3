@@ -92,39 +92,11 @@ func run(c *cli.Context) error {
 	reportTarget := c.String("report-target")
 	artifactFilePath := c.String("artifact-file")
 
-	var newFolder string
-	if reportTarget == "" {
-		newFolder = "build-" + pipelineSeqID
-	} else {
-		newFolder = reportTarget + "/build-" + pipelineSeqID
-	}
+	newFolder := getNewFolder(pipelineSeqID, reportTarget)
 
 	fmt.Printf("\nUploading Cobertura reports to %s/%s", awsBucket, newFolder)
 
-	var creds *credentials.Credentials
-	if roleArn == "" {
-		creds = credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, "")
-	} else {
-		// Assume Role
-		sess := session.Must(session.NewSession(&aws.Config{
-			Credentials: credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, ""),
-			Region:      aws.String(awsDefaultRegion),
-		}))
-
-		stsSvc := sts.New(sess)
-
-		params := &sts.AssumeRoleInput{
-			RoleArn:         aws.String(roleArn),
-			RoleSessionName: aws.String(roleSessionName),
-		}
-
-		resp, err := stsSvc.AssumeRole(params)
-		if err != nil {
-			log.Fatal("Error assuming role:", err)
-		}
-
-		creds = credentials.NewStaticCredentials(*resp.Credentials.AccessKeyId, *resp.Credentials.SecretAccessKey, *resp.Credentials.SessionToken)
-	}
+	creds := getAWSCredentials(awsAccessKey, awsSecretKey, roleArn, roleSessionName, awsDefaultRegion)
 
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(awsDefaultRegion),
@@ -182,4 +154,36 @@ func run(c *cli.Context) error {
 	files = append(files, File{Name: artifactFilePath, URL: urls})
 
 	return writeArtifactFile(files, artifactFilePath)
+}
+
+func getNewFolder(pipelineSeqID, reportTarget string) string {
+	if reportTarget == "" {
+		return "build-" + pipelineSeqID
+	}
+	return reportTarget + "/build-" + pipelineSeqID
+}
+
+func getAWSCredentials(awsAccessKey, awsSecretKey, roleArn, roleSessionName, awsDefaultRegion string) *credentials.Credentials {
+	if roleArn == "" {
+		return credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, "")
+	}
+
+	sess := session.Must(session.NewSession(&aws.Config{
+		Credentials: credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, ""),
+		Region:      aws.String(awsDefaultRegion),
+	}))
+
+	stsSvc := sts.New(sess)
+
+	params := &sts.AssumeRoleInput{
+		RoleArn:         aws.String(roleArn),
+		RoleSessionName: aws.String(roleSessionName),
+	}
+
+	resp, err := stsSvc.AssumeRole(params)
+	if err != nil {
+		log.Fatal("Error assuming role:", err)
+	}
+
+	return credentials.NewStaticCredentials(*resp.Credentials.AccessKeyId, *resp.Credentials.SecretAccessKey, *resp.Credentials.SessionToken)
 }
