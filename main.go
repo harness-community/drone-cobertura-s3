@@ -3,13 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
+
 	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/sts"
 
 	log "github.com/sirupsen/logrus"
@@ -89,6 +90,7 @@ func run(c *cli.Context) error {
 	roleSessionName := c.String("role-session-name")
 	reportSource := c.String("report-source")
 	reportTarget := c.String("report-target")
+	artifactFilePath := c.String("artifact-file")
 
 	var newFolder string
 	if reportTarget == "" {
@@ -97,72 +99,72 @@ func run(c *cli.Context) error {
 		newFolder = reportTarget + "/build-" + pipelineSeqID
 	}
 
-	fmt.Printf("\nUploading Cobertura reports to " + awsBucket + "/" + newFolder)
+	fmt.Printf("\nUploading Cobertura reports to %s/%s", awsBucket, newFolder)
 
-	// AWS session and S3 client setup
+	var creds *credentials.Credentials
+	if roleArn == "" {
+		creds = credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, "")
+	} else {
+		// Assume Role
+		sess := session.Must(session.NewSession(&aws.Config{
+			Credentials: credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, ""),
+			Region:      aws.String(awsDefaultRegion),
+		}))
+
+		stsSvc := sts.New(sess)
+
+		params := &sts.AssumeRoleInput{
+			RoleArn:         aws.String(roleArn),
+			RoleSessionName: aws.String(roleSessionName),
+		}
+
+		resp, err := stsSvc.AssumeRole(params)
+		if err != nil {
+			log.Fatal("Error assuming role:", err)
+		}
+
+		creds = credentials.NewStaticCredentials(*resp.Credentials.AccessKeyId, *resp.Credentials.SecretAccessKey, *resp.Credentials.SessionToken)
+	}
+
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(awsDefaultRegion),
-		Credentials: credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, ""),
+		Credentials: creds,
 	}))
 
-	if roleArn != "" {
-		// Assume Role if roleArn is provided
-		if roleSessionName == "" {
-			roleSessionName = "drone"
-		}
-		creds, err := stsAssumeRole(sess, roleArn, roleSessionName)
+	// Upload each file in the directory to S3
+	err := filepath.Walk(reportSource, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			fmt.Printf("\nError: %s\n", err)
-			return err
-		}
-		sess.Config.Credentials = creds
-	}
-
-	// Check if reportSource is a directory
-	fileInfo, err := os.Stat(reportSource)
-	if err != nil {
-		fmt.Printf("\nError checking file or directory: %s\n", err)
-		return err
-	}
-
-	if !fileInfo.IsDir() {
-		fmt.Printf("\nError: The specified 'report-source' is not a directory. Please provide a valid directory path.\n")
-		return fmt.Errorf("report-source is not a directory")
-	}
-
-	// Walk through the directory and upload files
-	err = filepath.Walk(reportSource, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			fmt.Printf("\nError traversing directory: %s\n", err)
 			return err
 		}
 
-		// Skip directories
 		if info.IsDir() {
-			return nil
+			return nil // Skip directories
 		}
 
-		// Open the file
 		file, err := os.Open(path)
 		if err != nil {
-			fmt.Printf("\nError opening file: %s\n", err)
+			log.Fatal("Error opening file:", err)
 			return err
 		}
 		defer file.Close()
 
-		// Construct the S3 key relative to the original reportSource directory
-		key := filepath.ToSlash(filepath.Join(newFolder, strings.TrimPrefix(path, reportSource)))
+		// Calculate the S3 key based on the original file path
+		s3Key := strings.TrimPrefix(path, reportSource)
+		s3Key = strings.TrimLeft(s3Key, string(os.PathSeparator))
+		s3Key = filepath.Join(newFolder, s3Key)
 
-		// Upload report to S3
-		uploader := s3manager.NewUploader(sess)
-		_, err = uploader.Upload(&s3manager.UploadInput{
-			Bucket: aws.String(awsBucket),
-			Key:    aws.String(key),
-			Body:   file,
-			ACL:    aws.String("public-read"),
-		})
+		params := &s3.PutObjectInput{
+			Bucket:      aws.String(awsBucket),
+			Key:         aws.String(s3Key),
+			Body:        file,
+			ACL:         aws.String("public-read"),
+			ContentType: aws.String("text/html"),
+		}
+
+		s3Svc := s3.New(sess)
+		_, err = s3Svc.PutObject(params)
 		if err != nil {
-			fmt.Printf("\nAWS SDK Error: %s\n", err)
+			fmt.Printf("\nAWS SDK Error: %v\n", err)
 			return err
 		}
 
@@ -170,35 +172,14 @@ func run(c *cli.Context) error {
 	})
 
 	if err != nil {
-		fmt.Printf("\nError walking through directory: %s\n", err)
+		log.Fatal("Error walking directory:", err)
 		return err
 	}
 
 	urls := fmt.Sprintf("http://%s.s3-website.%s.amazonaws.com/%s/index.html", awsBucket, awsDefaultRegion, newFolder)
-	artifactFilePath := c.String("artifact-file")
 
 	files := make([]File, 0)
 	files = append(files, File{Name: artifactFilePath, URL: urls})
 
 	return writeArtifactFile(files, artifactFilePath)
-}
-
-// stsAssumeRole assumes a role and returns the temporary credentials
-func stsAssumeRole(sess *session.Session, roleArn, roleSessionName string) (*credentials.Credentials, error) {
-	svc := sts.New(sess)
-	input := &sts.AssumeRoleInput{
-		RoleArn:         aws.String(roleArn),
-		RoleSessionName: aws.String(roleSessionName),
-	}
-
-	result, err := svc.AssumeRole(input)
-	if err != nil {
-		return nil, err
-	}
-
-	return credentials.NewStaticCredentials(
-		*result.Credentials.AccessKeyId,
-		*result.Credentials.SecretAccessKey,
-		*result.Credentials.SessionToken,
-	), nil
 }
