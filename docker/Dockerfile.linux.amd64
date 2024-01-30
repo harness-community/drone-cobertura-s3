@@ -1,7 +1,13 @@
+FROM alpine:latest as builder
+
+RUN apk --no-cache add ca-certificates
+
 FROM alpine:latest
 
-ADD release/linux/amd64/drone-cobertura-s3 /bin/
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
-RUN apk add --no-cache bash
+ENV GODEBUG netdns=go
 
-ENTRYPOINT ["/bin/bash", "-l", "-c", "/bin/drone-cobertura-s3"]
+COPY release/linux/amd64/drone-cobertura-s3 /bin/
+
+ENTRYPOINT ["/bin/drone-cobertura-s3"]
