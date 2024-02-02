@@ -2,7 +2,7 @@ FROM alpine:latest as builder
 
 RUN apk --no-cache add ca-certificates
 
-FROM alpine:latest
+FROM scratch
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
