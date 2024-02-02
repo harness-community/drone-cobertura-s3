@@ -29,3 +29,5 @@ logs/
 
 # Binary directory
 release/
+
+.DS_Store
