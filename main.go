@@ -121,9 +121,7 @@ func run(c *cli.Context) error {
 		defer file.Close()
 
 		// Calculate the S3 key based on the original file path
-		s3Key := strings.TrimPrefix(path, reportSource)
-		s3Key = strings.TrimLeft(s3Key, string(os.PathSeparator))
-		s3Key = filepath.Join(newFolder, s3Key)
+		s3Key := calculateS3Key(path, reportSource, newFolder)
 
 		params := &s3.PutObjectInput{
 			Bucket:      aws.String(awsBucket),
@@ -151,9 +149,18 @@ func run(c *cli.Context) error {
 	urls := fmt.Sprintf("http://%s.s3-website.%s.amazonaws.com/%s/index.html", awsBucket, awsDefaultRegion, newFolder)
 
 	files := make([]File, 0)
-	files = append(files, File{Name: artifactFilePath, URL: urls})
+	files = appendToFileSlice(files, artifactFilePath, urls)
 
 	return writeArtifactFile(files, artifactFilePath)
+}
+
+func calculateS3Key(path, reportSource, newFolder string) string {
+	// Calculate the S3 key based on the original file path
+	s3Key := strings.TrimPrefix(path, reportSource)
+	s3Key = strings.TrimLeft(s3Key, string(os.PathSeparator))
+	s3Key = filepath.Join(newFolder, s3Key)
+
+	return s3Key
 }
 
 func getNewFolder(pipelineSeqID, reportTarget string) string {
@@ -161,6 +168,10 @@ func getNewFolder(pipelineSeqID, reportTarget string) string {
 		return "build-" + pipelineSeqID
 	}
 	return reportTarget + "/build-" + pipelineSeqID
+}
+
+func appendToFileSlice(files []File, name, url string) []File {
+	return append(files, File{Name: name, URL: url})
 }
 
 func getAWSCredentials(awsAccessKey, awsSecretKey, roleArn, roleSessionName, awsDefaultRegion string) *credentials.Credentials {
