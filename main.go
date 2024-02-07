@@ -1,17 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-
 	"path/filepath"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -96,15 +97,18 @@ func run(c *cli.Context) error {
 
 	fmt.Printf("\nUploading Cobertura reports to %s/%s", awsBucket, newFolder)
 
-	creds := getAWSCredentials(awsAccessKey, awsSecretKey, roleArn, roleSessionName, awsDefaultRegion)
+	creds := getAWSCredentials(context.Background(), awsAccessKey, awsSecretKey, roleArn, roleSessionName, awsDefaultRegion)
 
-	sess := session.Must(session.NewSession(&aws.Config{
-		Region:      aws.String(awsDefaultRegion),
-		Credentials: creds,
-	}))
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(awsDefaultRegion), config.WithCredentialsProvider(creds))
+	if err != nil {
+		log.Fatalf("unable to load SDK config, %v", err)
+	}
+
+	// Create an Amazon S3 service client
+	s3Client := s3.NewFromConfig(cfg)
 
 	// Upload each file in the directory to S3
-	err := filepath.Walk(reportSource, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(reportSource, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -123,16 +127,14 @@ func run(c *cli.Context) error {
 		// Calculate the S3 key based on the original file path
 		s3Key := calculateS3Key(path, reportSource, newFolder)
 
-		params := &s3.PutObjectInput{
+		_, err = s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+			// input parameters
 			Bucket:      aws.String(awsBucket),
 			Key:         aws.String(s3Key),
 			Body:        file,
-			ACL:         aws.String("public-read"),
+			ACL:         types.ObjectCannedACLPublicRead,
 			ContentType: aws.String("text/html"),
-		}
-
-		s3Svc := s3.New(sess)
-		_, err = s3Svc.PutObject(params)
+		})
 		if err != nil {
 			fmt.Printf("\nAWS SDK Error: %v\n", err)
 			return err
@@ -174,27 +176,31 @@ func appendToFileSlice(files []File, name, url string) []File {
 	return append(files, File{Name: name, URL: url})
 }
 
-func getAWSCredentials(awsAccessKey, awsSecretKey, roleArn, roleSessionName, awsDefaultRegion string) *credentials.Credentials {
+func getAWSCredentials(ctx context.Context, awsAccessKey, awsSecretKey, roleArn, roleSessionName, awsDefaultRegion string) aws.CredentialsProvider {
 	if roleArn == "" {
-		return credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, "")
+		return aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, ""))
 	}
 
-	sess := session.Must(session.NewSession(&aws.Config{
-		Credentials: credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, ""),
-		Region:      aws.String(awsDefaultRegion),
-	}))
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		log.Fatalf("unable to load AWS SDK config, %v", err)
+	}
 
-	stsSvc := sts.New(sess)
+	stsClient := sts.NewFromConfig(cfg)
 
 	params := &sts.AssumeRoleInput{
 		RoleArn:         aws.String(roleArn),
 		RoleSessionName: aws.String(roleSessionName),
 	}
 
-	resp, err := stsSvc.AssumeRole(params)
+	resp, err := stsClient.AssumeRole(ctx, params)
 	if err != nil {
 		log.Fatal("Error assuming role:", err)
 	}
 
-	return credentials.NewStaticCredentials(*resp.Credentials.AccessKeyId, *resp.Credentials.SecretAccessKey, *resp.Credentials.SessionToken)
+	return aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(
+		*resp.Credentials.AccessKeyId,
+		*resp.Credentials.SecretAccessKey,
+		*resp.Credentials.SessionToken,
+	))
 }
