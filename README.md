@@ -1,6 +1,16 @@
 # drone-cobertura-s3
 
-Drone plugin to upload cobertura code coverage reports to AWS S3 bucket and publish the bucket static site URL to `Artifacts` tab under `Pipieline Execution`.
+- [Synopsis](#Synopsis)
+- [Notes](#Notes)
+- [Build](#Build)
+- [Docker](#Docker)
+- [Usage](#Usage)
+
+## Synopsis
+This plugin is designed to streamline the process of uploading Cobertura reports to an Amazon S3 bucket and retrieving and publishing a URL to `Artifacts` tab under `Pipieline Execution` for users to view their reports. With this plugin, users can easily upload their Cobertura reports along with a custom HTML template to S3, and obtain a URL pointing to their customized report visualization.
+
+## Notes
+Users are required to create a custom HTML template named index.html to define the design and layout of their Cobertura report visualization. This HTML file will serve as the frontend interface for viewing the uploaded reports. It should include placeholders or dynamic elements where relevant information from the Cobertura reports can be displayed.
 
 ## Build
 
