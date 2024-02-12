@@ -1,9 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -82,48 +91,116 @@ func run(c *cli.Context) error {
 	roleSessionName := c.String("role-session-name")
 	reportSource := c.String("report-source")
 	reportTarget := c.String("report-target")
-
-	var newFolder string
-	if reportTarget == "" {
-		newFolder = "build-" + pipelineSeqID
-	} else {
-		newFolder = reportTarget + "/build-" + pipelineSeqID
-	}
-
-	fmt.Printf("\nUploading Cobertura reports to " + awsBucket + "/" + newFolder)
-
-	if roleArn == "" {
-		fmt.Printf("\nAWS configuration....")
-		exec.Command("aws", "configure", "set", "aws_access_key_id", awsAccessKey).Run()
-		exec.Command("aws", "configure", "set", "aws_secret_access_key", awsSecretKey).Run()
-	} else {
-		if roleSessionName == "" {
-			roleSessionName = "drone"
-		}
-		cmd := exec.Command("/bin/sh", "-c",
-			`export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s" $(aws sts assume-role-with-web-identity --role-arn `+roleArn+` --role-session-name `+roleSessionName+`--web-identity-token file://$AWS_WEB_IDENTITY_TOKEN_FILE --query "Credentials.[AccessKeyId,SecretAccessKey,SessionToken]" --output text))`)
-
-		if err := cmd.Run(); err != nil {
-			log.Fatal("Error:", err)
-		}
-	}
-
-	reportUploadcmd := exec.Command("aws", "s3", "cp", reportSource, "s3://"+awsBucket+"/"+newFolder, "--region", awsDefaultRegion, "--recursive", "--acl=public-read")
-	fmt.Printf("\nreportUploadcmd: %v", reportUploadcmd)
-
-	out, err := reportUploadcmd.Output()
-	if err != nil {
-		// Error here
-		fmt.Printf("\nAWS CLI Error: %s\n", reportUploadcmd.Stderr)
-		return err
-	}
-	fmt.Printf("\nOutput: %s\n", out)
-
-	urls := "http://" + awsBucket + ".s3-website." + awsDefaultRegion + ".amazonaws.com/" + newFolder + "/index.html"
 	artifactFilePath := c.String("artifact-file")
 
+	newFolder := getNewFolder(pipelineSeqID, reportTarget)
+
+	fmt.Printf("\nUploading Cobertura reports to %s/%s", awsBucket, newFolder)
+
+	creds := getAWSCredentials(context.Background(), awsAccessKey, awsSecretKey, roleArn, roleSessionName, awsDefaultRegion)
+
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(awsDefaultRegion), config.WithCredentialsProvider(creds))
+	if err != nil {
+		log.Fatalf("unable to load SDK config, %v", err)
+	}
+
+	// Create an Amazon S3 service client
+	s3Client := s3.NewFromConfig(cfg)
+
+	// Upload each file in the directory to S3
+	err = filepath.Walk(reportSource, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil // Skip directories
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			log.Fatal("Error opening file:", err)
+			return err
+		}
+		defer file.Close()
+
+		// Calculate the S3 key based on the original file path
+		s3Key := calculateS3Key(path, reportSource, newFolder)
+
+		_, err = s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+			// input parameters
+			Bucket:      aws.String(awsBucket),
+			Key:         aws.String(s3Key),
+			Body:        file,
+			ACL:         types.ObjectCannedACLPublicRead,
+			ContentType: aws.String("text/html"),
+		})
+		if err != nil {
+			fmt.Printf("\nAWS SDK Error: %v\n", err)
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.Fatal("Error walking directory:", err)
+		return err
+	}
+
+	urls := fmt.Sprintf("http://%s.s3-website.%s.amazonaws.com/%s/index.html", awsBucket, awsDefaultRegion, newFolder)
+
 	files := make([]File, 0)
-	files = append(files, File{Name: artifactFilePath, URL: urls})
+	files = appendToFileSlice(files, artifactFilePath, urls)
 
 	return writeArtifactFile(files, artifactFilePath)
+}
+
+func calculateS3Key(path, reportSource, newFolder string) string {
+	// Calculate the S3 key based on the original file path
+	s3Key := strings.TrimPrefix(path, reportSource)
+	s3Key = strings.TrimLeft(s3Key, string(os.PathSeparator))
+	s3Key = filepath.Join(newFolder, s3Key)
+
+	return s3Key
+}
+
+func getNewFolder(pipelineSeqID, reportTarget string) string {
+	if reportTarget == "" {
+		return "build-" + pipelineSeqID
+	}
+	return reportTarget + "/build-" + pipelineSeqID
+}
+
+func appendToFileSlice(files []File, name, url string) []File {
+	return append(files, File{Name: name, URL: url})
+}
+
+func getAWSCredentials(ctx context.Context, awsAccessKey, awsSecretKey, roleArn, roleSessionName, awsDefaultRegion string) aws.CredentialsProvider {
+	if roleArn == "" {
+		return aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, ""))
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		log.Fatalf("unable to load AWS SDK config, %v", err)
+	}
+
+	stsClient := sts.NewFromConfig(cfg)
+
+	params := &sts.AssumeRoleInput{
+		RoleArn:         aws.String(roleArn),
+		RoleSessionName: aws.String(roleSessionName),
+	}
+
+	resp, err := stsClient.AssumeRole(ctx, params)
+	if err != nil {
+		log.Fatal("Error assuming role:", err)
+	}
+
+	return aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(
+		*resp.Credentials.AccessKeyId,
+		*resp.Credentials.SecretAccessKey,
+		*resp.Credentials.SessionToken,
+	))
 }

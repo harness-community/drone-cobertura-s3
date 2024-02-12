@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -47,7 +46,7 @@ func writeArtifactFile(files []File, artifactFilePath string) error {
 		return errors.Wrap(err, fmt.Sprintf("failed to create %s directory for artifact file", dir))
 	}
 
-	err = ioutil.WriteFile(artifactFilePath, b, 0644)
+	err = os.WriteFile(artifactFilePath, b, 0644)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to write artifact to artifact file %s", artifactFilePath))
 	}
