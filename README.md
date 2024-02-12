@@ -17,10 +17,10 @@ This plugin is designed to streamline the process of uploading Cobertura reports
 | aws_default_region <span style="font-size: 10px"><br/>`string`</span> <span style="color:red; font-size: 10px">`required`</span>              |      The default region where the bucket is deployed.                        |
 | aws_bucket <span style="font-size: 10px"><br/>`string`</span> <span style="color:red; font-size: 10px">`required`</span> |                   The name of the S3 bucket where the files are to be uploaded.                       |
 | report_source <span style="font-size: 10px"><br/>`string`</span><span style="color:red; font-size: 10px">`required`</span>                     | The directory containing the Cobertura report files and custom HTML template. |
-| role_arn <span style="font-size: 10px"><br/>`string`</span>                   | The directory containing the Cobertura report files and custom HTML template. |
-| role_session_name <span style="font-size: 10px"><br/>`string`</span>                   | The directory containing the Cobertura report files and custom HTML template. |
+| role_arn <span style="font-size: 10px"><br/>`string`</span>                   | Specifies the AWS Role ARN (Amazon Resource Name) to assume for temporary credentials when uploading to S3. |
+| role_session_name <span style="font-size: 10px"><br/>`string`</span>                   | Specifies the name of the session when assuming the specified role. |
 | report_target <span style="font-size: 10px"><br/>`string`</span>                   | The target directory in the S3 bucket where the Cobertura report files is to be uploaded. |
-| artifact_file <span style="font-size: 10px"><br/>`string`</span>                   | The directory containing the Cobertura report files and custom HTML template. |
+| artifact_file <span style="font-size: 10px"><br/>`string`</span>                   | Specifies the path to the artifact file where the URL of the uploaded template file containing Cobertura reports will be written. |
 
 
 ## Notes
